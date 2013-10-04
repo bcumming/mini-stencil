@@ -13,6 +13,7 @@
 program extended_examples
 
   ! modules
+  use omp_lib
 
   use constants, only: ir
 
@@ -28,15 +29,13 @@ program extended_examples
   real (kind=ir), allocatable :: cflx(:,:,:), cfly(:,:,:)
   real (kind=ir), allocatable :: dcoeff, kcoeff
 
+  real (kind=8) :: timespent
+
   integer :: ierr
   integer :: i, j, k, it
   integer :: istart, iend, jstart, jend, kstart, kend
   integer :: nincout
   integer :: iseed(80), nseed
-
-#ifdef _NETCDF
-  character(len=255) :: fname = 'out.nc'
-#endif
 
   write(*,'(a)') 'Welcome to stencil3d!'
 
@@ -112,6 +111,9 @@ program extended_examples
 
   ! ****************** serial reference version ******************
 
+  ! start timer
+  timespent = -omp_get_wtime();
+
   ! main timeloop
   do it = 1, nt
 
@@ -144,6 +146,10 @@ program extended_examples
     call swap_data()
 
   end do
+
+  ! stop timer
+  timespent = timespent + omp_get_wtime();
+  PRINT *, nt ' time steps took total ', timespent, ' seconds, average ', timespent/nt , ' seconds'
 
   ! ****************** cleanup ******************
 
