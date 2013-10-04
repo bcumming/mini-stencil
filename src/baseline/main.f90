@@ -149,7 +149,7 @@ program extended_examples
 
   ! stop timer
   timespent = timespent + omp_get_wtime();
-  PRINT *, nt ' time steps took total ', timespent, ' seconds, average ', timespent/nt , ' seconds'
+  PRINT *, nt, ' time steps took total ', timespent, ' seconds, average ', timespent/nt , ' seconds'
 
   ! ****************** cleanup ******************
 
