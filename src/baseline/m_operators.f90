@@ -150,6 +150,53 @@ end subroutine adv_upwind5_y
 
 !==============================================================================
 
+subroutine d_to_a(s_out, u_in, v_in, w_in, cx, cy, cz, nx, ny, nz,             &
+                  istart, iend, jstart, jend, kstart, kend)
+
+!------------------------------------------------------------------------------
+!
+! Description:
+!   Apply a 3D 6 point stencil operating on a D-grid vector field to obtain
+!   a scalar field on an A-grid.  Divergence is the typical operation.
+!   
+! 
+! Method:
+!   Standard split finite difference operator (second order), which assumes 
+!   equal but opposite coefficients on the upper and lower points
+!
+!------------------------------------------------------------------------------
+
+! arguments
+  real (kind=ir), intent(out) :: s_out(nx,  ny,   nz  )
+  integer, intent(in) :: nx, ny, nz
+  real (kind=ir), intent(in)  :: u_in(nx+1, ny,   nz  )
+  real (kind=ir), intent(in)  :: v_in(nx,   ny+1, nz  )
+  real (kind=ir), intent(in)  :: w_in(nx,   ny,   nz+1)
+  real (kind=ir), intent(in)  :: cx(2), cy(2), cz(2)
+
+  integer, intent(in) :: istart, iend, jstart, jend, kstart, kend
+
+! local variables
+  integer :: i, j, k
+
+  const1 = 1.0_ir / 60.0_ir
+
+  do k = kstart, kend
+    do j = jstart, jend
+      do i = istart, iend
+
+        s_out(i,j,k)  =   cx(1)*u_in(i+1, j,   k  ) + cx(2)*u_in(i,   j,   k  ) +   &
+          &               cy(1)*v_in(i,   j+1, k  ) + cy(2)*v_in(i,   j,   k  ) +   &
+          &               cz(1)*w_in(i,   j,   k+1) + cz(2)*w_in(i,   j,   k  )
+
+     end do
+    end do
+  end do
+
+end subroutine d_to_a
+
+!==============================================================================
+
 subroutine lap_2(s, s_out, dcoeff, nx, ny, nz, &
                  istart, iend, jstart, jend, kstart, kend)
 
