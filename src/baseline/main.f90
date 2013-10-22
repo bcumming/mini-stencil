@@ -30,14 +30,13 @@ program extended_examples
   real (kind=ir), allocatable :: dcoeff, kcoeff
 
   real (kind=8) :: timespent
+  real (kind=8) :: time_in_bcs, time_in_advx, time_in_advy, time_in_lap4, time_in_difz, time_in_other
 
   integer :: ierr
   integer :: i, j, k, it
   integer :: istart, iend, jstart, jend, kstart, kend
   integer :: nincout
   integer :: iseed(80), nseed
-
-  write(*,'(a)') 'Welcome to stencil3d!'
 
   ! ****************** read command line arguments ******************
 
@@ -47,6 +46,15 @@ program extended_examples
   ! add halo points to total size
   nx = nx + 2*nb
   ny = ny + 2*nb
+
+  ! ****************** setup compute domain ******************
+
+  write(*,'(A)') '========================================================================'
+  print *,       '                      Welcome to mini-stencil!'
+  print *, 'mesh :: ', nx - 2*nb, '*', ny - 2*nb, '*', nz
+  print *, 'halo :: ', nb, 'lines'
+  print *, 'time :: ', nt, 'time steps'
+  write(*,'(A)') '========================================================================'
 
   ! ****************** setup compute domain ******************
 
@@ -111,45 +119,83 @@ program extended_examples
 
   ! ****************** serial reference version ******************
 
+  time_in_bcs  = 0.0_ir
+  time_in_advx = 0.0_ir
+  time_in_advy = 0.0_ir
+  time_in_lap4 = 0.0_ir
+  time_in_difz = 0.0_ir
+
   ! start timer
   timespent = -omp_get_wtime();
 
   ! main timeloop
   do it = 1, nt
 
-    write(*,'(a,i5)') 'Step', it
+    !write(*,'(a,i5)') 'Step', it
 
     ! x-advection
+    time_in_bcs = time_in_bcs - omp_get_wtime()
     call bc_zerograd( data_in, 3, .true., .true., .false., .false., &
                       nx, ny, nz, istart, iend, jstart, jend, kstart, kend )
+    time_in_bcs = time_in_bcs + omp_get_wtime()
+
+    time_in_advx= time_in_advx - omp_get_wtime()
     call adv_upwind5_x( data_in, data_out, cflx, &
                         nx, ny, nz, istart, iend, jstart, jend, kstart, kend )
+    time_in_advx= time_in_advx + omp_get_wtime()
     call swap_data()
 
     ! y-advection
+    time_in_bcs = time_in_bcs - omp_get_wtime()
     call bc_zerograd( data_in, 3, .false., .false., .true., .true., &
                       nx, ny, nz, istart, iend, jstart, jend, kstart, kend )
+    time_in_bcs = time_in_bcs + omp_get_wtime()
+
+    time_in_advy= time_in_advy - omp_get_wtime()
     call adv_upwind5_y( data_in, data_out, cfly, &
                         nx, ny, nz, istart, iend, jstart, jend, kstart, kend )
+    time_in_advy= time_in_advy + omp_get_wtime()
     call swap_data()
 
     ! xy-diffusion
+    time_in_bcs = time_in_bcs - omp_get_wtime()
     call bc_zerograd( data_in, 2, .true., .true., .true., .true., &
                       nx, ny, nz, istart, iend, jstart, jend, kstart, kend )
+    time_in_bcs = time_in_bcs + omp_get_wtime()
+
+    time_in_lap4= time_in_lap4 - omp_get_wtime()
     call lap_4( data_in, data_out, dcoeff, &
                 nx, ny, nz, istart, iend, jstart, jend, kstart, kend )
+    time_in_lap4= time_in_lap4 + omp_get_wtime()
     call swap_data()
 
     ! z-diffusion (implicit)
+    time_in_difz= time_in_difz - omp_get_wtime()
     call diff_impl_z( data_in, data_out, kcoeff, &
                       nx, ny, nz, istart, iend, jstart, jend )
+    time_in_difz= time_in_difz + omp_get_wtime()
     call swap_data()
 
   end do
 
   ! stop timer
   timespent = timespent + omp_get_wtime();
-  PRINT *, nt, ' time steps took total ', timespent, ' seconds, average ', timespent/nt , ' seconds'
+  time_in_other = timespent - (time_in_bcs+time_in_advx+time_in_advy+time_in_lap4+time_in_difz)
+  ! print table sumarizing 
+  write(*,'(A)') '-----------------------------------------------------'
+  write(*,'(A)') 'component               walltime (s)  proportion (%)'
+  write(*,'(A)') '-----------------------------------------------------'
+  write(*,'(A,F11.6,A,F4.1)') 'boundary conditions  ', time_in_bcs,  '      ', time_in_bcs/timespent*100.0
+  write(*,'(A,F11.6,A,F4.1)') 'advection x          ', time_in_advx, '      ', time_in_advx/timespent*100.0
+  write(*,'(A,F11.6,A,F4.1)') 'advection y          ', time_in_advy, '      ', time_in_advy/timespent*100.0
+  write(*,'(A,F11.6,A,F4.1)') 'horizontal diffusion ', time_in_lap4, '      ', time_in_lap4/timespent*100.0
+  write(*,'(A,F11.6,A,F4.1)') 'vertical diffusion   ', time_in_difz, '      ', time_in_difz/timespent*100.0
+  write(*,'(A,F11.6,A,F4.1)') 'OTHER                ', time_in_other,'      ', time_in_other/timespent*100.0
+  write(*,'(A)') '-----------------------------------------------------'
+  write(*,'(A,F11.6,A)')      'TOTAL                ', timespent
+  write(*,'(A)') '-----------------------------------------------------'
+
+
 
   ! ****************** cleanup ******************
 
