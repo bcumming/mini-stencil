@@ -64,13 +64,13 @@ subroutine adv_upwind5_x( s, s_out, cfl, nx, ny, nz, &
 
   ! update the flop counts
   ! the three operations in the stencil kernel can be abbreviated as follows
-  ! we count the call to abs() as a floating point operation
+  ! we don't count the call to abs() as a floating point operation
 
   ! 8  ops   cd_6order = x * ((x-x) - x*(x-x) + x*(x-x))
   ! 11 ops   diff_6order = abs(x) * ( (x+x) - x * (x+x) + x * (x+x) - x * x)
   ! 3  ops   s_out(i, j, k) = x - x * (x-x)
-  ! 22 ops total
-  flops_advx =  flops_advx + 22 * (iend-istart+1)*(jend-jstart+1)*(kend-kstart+1)
+  ! 21 ops total
+  flops_advx =  flops_advx + 21 * (iend-istart+1)*(jend-jstart+1)*(kend-kstart+1)
 
 end subroutine adv_upwind5_x
 
@@ -122,13 +122,13 @@ subroutine adv_upwind5_y(s, s_out, cfl, nx, ny, nz, &
   end do
   ! update the flop counts
   ! the three operations in the stencil kernel can be abbreviated as follows
-  ! we count the call to abs() as a floating point operation
+  ! we don't count the call to abs() as a floating point operation
 
   ! 8  ops   cd_6order = x * ((x-x) - x*(x-x) + x*(x-x))
   ! 11 ops   diff_6order = abs(x) * ( (x+x) - x * (x+x) + x * (x+x) - x * x)
   ! 3  ops   s_out(i, j, k) = x - x * (x-x)
-  ! 22 ops total
-  flops_advy =  flops_advy + 22 * (iend-istart+1)*(jend-jstart+1)*(kend-kstart+1)
+  ! 21 ops total
+  flops_advy =  flops_advy + 21 * (iend-istart+1)*(jend-jstart+1)*(kend-kstart+1)
 
 end subroutine adv_upwind5_y
 

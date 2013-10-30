@@ -217,9 +217,9 @@ program extended_examples
   flops_total = flops_advx + flops_advy + flops_lap4 + flops_difz + flops_bc
 
   ! print table sumarizing 
-  write(*,'(A)') '-------------------------------------------------------------------------------------'
+  write(*,'(A)') '-------------------------------------------------------------------------------'
   write(*,'(A)') 'component               walltime(s)   prop(%)               FLOPs        GFLOPs'
-  write(*,'(A)') '-------------------------------------------------------------------------------------'
+  write(*,'(A)') '-------------------------------------------------------------------------------'
   write(*,'(A,F11.6,A,F4.1)')       'boundary conditions     ', time_in_bcs, &
                                     '      ', time_in_bcs/timespent*100.0
   write(*,'(A,F11.6,A,F4.1,A,I14,A,F8.4)') &
@@ -244,13 +244,13 @@ program extended_examples
                                     '      ', flops_difz/time_in_difz/1000000000.0
   write(*,'(A,F11.6,A,F4.1)')       'OTHER                   ', time_in_other, &
                                     '      ', time_in_other/timespent*100.0
-  write(*,'(A)') '-------------------------------------------------------------------------------------'
+  write(*,'(A)') '-------------------------------------------------------------------------------'
   !write(*,'(A,F11.6,I14,A,F8.4,A,F8.4)') &
   write(*,'(A,F11.6,A,I14,A,F8.4)') &
                                     'TOTAL                   ', timespent, &
                                     '                ', flops_total, &
                                     '      ', flops_total/timespent/1000000000.0
-  write(*,'(A)') '-------------------------------------------------------------------------------------'
+  write(*,'(A)') '-------------------------------------------------------------------------------'
 
 #ifdef USE_PAPI_WRAP
   ! print counters to screen
