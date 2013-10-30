@@ -9,6 +9,7 @@
 module operators
 
 use constants, only: ir
+use stats,     only: flops_advx, flops_advy, flops_lap4, flops_bc, flops_difz
 
 implicit none
 
@@ -61,6 +62,16 @@ subroutine adv_upwind5_x( s, s_out, cfl, nx, ny, nz, &
     end do
   end do
 
+  ! update the flop counts
+  ! the three operations in the stencil kernel can be abbreviated as follows
+  ! we count the call to abs() as a floating point operation
+
+  ! 8  ops   cd_6order = x * ((x-x) - x*(x-x) + x*(x-x))
+  ! 11 ops   diff_6order = abs(x) * ( (x+x) - x * (x+x) + x * (x+x) - x * x)
+  ! 3  ops   s_out(i, j, k) = x - x * (x-x)
+  ! 22 ops total
+  flops_advx =  flops_advx + 22 * (iend-istart+1)*(jend-jstart+1)*(kend-kstart+1)
+
 end subroutine adv_upwind5_x
 
 !==============================================================================
@@ -109,6 +120,15 @@ subroutine adv_upwind5_y(s, s_out, cfl, nx, ny, nz, &
      end do
     end do
   end do
+  ! update the flop counts
+  ! the three operations in the stencil kernel can be abbreviated as follows
+  ! we count the call to abs() as a floating point operation
+
+  ! 8  ops   cd_6order = x * ((x-x) - x*(x-x) + x*(x-x))
+  ! 11 ops   diff_6order = abs(x) * ( (x+x) - x * (x+x) + x * (x+x) - x * x)
+  ! 3  ops   s_out(i, j, k) = x - x * (x-x)
+  ! 22 ops total
+  flops_advy =  flops_advy + 22 * (iend-istart+1)*(jend-jstart+1)*(kend-kstart+1)
 
 end subroutine adv_upwind5_y
 
@@ -202,6 +222,16 @@ subroutine lap_4(s, s_out, dcoeff, nx, ny, nz, &
 
   deallocate(work)
 
+  ! update the flop counts
+  ! the two operations in the stencil kernels above can be abbreviated as follows
+  ! lap2 kernel : range k, i-1:i+1, j-1:j+1
+  !     5 ops   work(i,j) = x + x + x + x - x*x
+  ! lap4 kernel : range k, i, j
+  !     7 ops   s_out(i,j) = x - x*(x+x+x+x-x*x)
+
+  flops_lap4 =  flops_lap4 + 5 * (iend-istart+3)*(jend-jstart+3)*(kend-kstart+1) &
+                           + 7 * (iend-istart+1)*(jend-jstart+1)*(kend-kstart+1)
+
 end subroutine lap_4
 
 !==============================================================================
@@ -230,34 +260,45 @@ subroutine diff_impl_z(s, s_out, kcoeff, nx, ny, nz, &
 
 ! local variables
   real (kind=ir), allocatable :: a(:,:,:), b(:,:,:), c(:,:,:), d(:,:,:)
+  real (kind=ir)  :: kneg, kplus1, kby2plus1
   integer :: i, j, k
 
 !------------------------------------------------------------------------------
 
   allocate(a(nx, ny, nz),b(nx, ny, nz),c(nx, ny, nz),d(nx, ny, nz))
+  kneg   = -kcoeff
+  kplus1 = 1.0_ir+kcoeff
+  kby2plus1 = 1.0_ir+2.0_ir*kcoeff
 
   ! compute tridiagonal matrix elements (a,b,c) and RHS (d)
   do j = jstart, jend
     do i = istart, iend
-      b(i,j,1) = 1.0_ir+kcoeff
-      c(i,j,1) = -kcoeff
+      !b(i,j,1) = 1.0_ir+kcoeff
+      !c(i,j,1) = -kcoeff
+      b(i,j,1) = kplus1
+      c(i,j,1) = kneg
       d(i,j,1) = s(i,j,1)
     end do
   end do
   do k = 2, nz-1
     do j = jstart, jend
       do i = istart, iend
-        a(i,j,k) = -kcoeff
-        b(i,j,k) = 1.0_ir+2.0_ir*kcoeff
-        c(i,j,k) = -kcoeff
+        !a(i,j,k) = -kcoeff
+        !b(i,j,k) = 1.0_ir+2.0_ir*kcoeff
+        !c(i,j,k) = -kcoeff
+        a(i,j,k) = kneg
+        b(i,j,k) = kby2plus1
+        c(i,j,k) = kneg
         d(i,j,k) = s(i,j,k)
       end do
     end do
   end do
   do j = jstart, jend
     do i = istart, iend
-      a(i,j,nz) = -kcoeff
-      b(i,j,nz) = 1.0_ir+kcoeff
+      !a(i,j,nz) = -kcoeff
+      !b(i,j,nz) = 1.0_ir+kcoeff
+      a(i,j,nz) = kneg
+      b(i,j,nz) = kplus1
       d(i,j,nz) = s(i,j,nz)
     end do
   end do
@@ -291,7 +332,7 @@ subroutine diff_impl_z(s, s_out, kcoeff, nx, ny, nz, &
       end do
     end do
   end do
-  
+
   ! back substitution
   do j = jstart, jend
     do i = istart, iend
@@ -307,6 +348,20 @@ subroutine diff_impl_z(s, s_out, kcoeff, nx, ny, nz, &
   end do
 
   deallocate(a,b,c,d)
+
+  ! update the flop counts
+  ! the two operations in the stencil kernels above can be abbreviated as follows
+  !  UL - decomposition
+  !      2 i*j
+  !      4 i*j*(k-1)
+  ! forward substitution
+  !      1 i*j
+  !      3 i*j*(k-1)
+  ! backward substitution
+  !      2 i*j*(k-1)
+
+  flops_difz =  flops_difz + 3*(iend-istart+1)*(jend-jstart+1) &
+                           + 9*(iend-istart+3)*(jend-jstart+3)*(nz-1)
 
 end subroutine diff_impl_z
 

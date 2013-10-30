@@ -23,13 +23,15 @@ program extended_examples
 
   ! modules
   use omp_lib
+  use m_papi_wrap
 
   use constants, only: ir
 
   use operators, only: bc_zerograd, adv_upwind5_x, adv_upwind5_y, &
                        lap_2, lap_4, diff_impl_z, bc_zerovalue
 
-  use m_papi_wrap
+  use stats,     only: flops_advx, flops_advy, flops_bc, flops_difz, &
+                       flops_lap4, flops_total
 
   implicit none
 
@@ -138,12 +140,16 @@ program extended_examples
   cfly = 0.11_ir
 
   ! ****************** serial reference version ******************
-
   time_in_bcs  = 0.0_ir
   time_in_advx = 0.0_ir
   time_in_advy = 0.0_ir
   time_in_lap4 = 0.0_ir
   time_in_difz = 0.0_ir
+  flops_advx = 0
+  flops_advy = 0
+  flops_bc   = 0
+  flops_difz = 0
+  flops_lap4 = 0
 
   ! start timer
   timespent = -omp_get_wtime();
@@ -208,20 +214,43 @@ program extended_examples
   call pw_get_time(hdl_difz, time_in_difz)
 #endif
   time_in_other = timespent - (time_in_bcs+time_in_advx+time_in_advy+time_in_lap4+time_in_difz)
+  flops_total = flops_advx + flops_advy + flops_lap4 + flops_difz + flops_bc
 
   ! print table sumarizing 
-  write(*,'(A)') '-----------------------------------------------------'
-  write(*,'(A)') 'component               walltime (s)  proportion (%)'
-  write(*,'(A)') '-----------------------------------------------------'
-  write(*,'(A,F11.6,A,F4.1)') 'boundary conditions  ', time_in_bcs,  '      ', time_in_bcs/timespent*100.0
-  write(*,'(A,F11.6,A,F4.1)') 'advection x          ', time_in_advx, '      ', time_in_advx/timespent*100.0
-  write(*,'(A,F11.6,A,F4.1)') 'advection y          ', time_in_advy, '      ', time_in_advy/timespent*100.0
-  write(*,'(A,F11.6,A,F4.1)') 'horizontal diffusion ', time_in_lap4, '      ', time_in_lap4/timespent*100.0
-  write(*,'(A,F11.6,A,F4.1)') 'vertical diffusion   ', time_in_difz, '      ', time_in_difz/timespent*100.0
-  write(*,'(A,F11.6,A,F4.1)') 'OTHER                ', time_in_other,'      ', time_in_other/timespent*100.0
-  write(*,'(A)') '-----------------------------------------------------'
-  write(*,'(A,F11.6,A)')      'TOTAL                ', timespent
-  write(*,'(A)') '-----------------------------------------------------'
+  write(*,'(A)') '-------------------------------------------------------------------------------------'
+  write(*,'(A)') 'component               walltime(s)   prop(%)               FLOPs        GFLOPs'
+  write(*,'(A)') '-------------------------------------------------------------------------------------'
+  write(*,'(A,F11.6,A,F4.1)')       'boundary conditions     ', time_in_bcs, &
+                                    '      ', time_in_bcs/timespent*100.0
+  write(*,'(A,F11.6,A,F4.1,A,I14,A,F8.4)') &
+                                    'advection x             ', time_in_advx, &
+                                    '      ', time_in_advx/timespent*100.0, &
+                                    '      ', flops_advx, &
+                                    '      ', flops_advx/time_in_advx/1000000000.0
+  write(*,'(A,F11.6,A,F4.1,A,I14,A,F8.4)') &
+                                    'advection y             ', time_in_advy, &
+                                    '      ', time_in_advy/timespent*100.0, &
+                                    '      ', flops_advy, &
+                                    '      ', flops_advy/time_in_advy/1000000000.0
+  write(*,'(A,F11.6,A,F4.1,A,I14,A,F8.4)') &
+                                    'horizontal diffusion    ', time_in_lap4, &
+                                    '      ', time_in_lap4/timespent*100.0, &
+                                    '      ', flops_lap4, &
+                                    '      ', flops_lap4/time_in_lap4/1000000000.0
+  write(*,'(A,F11.6,A,F4.1,A,I14,A,F8.4)') &
+                                    'vertical diffusion      ', time_in_difz, &
+                                    '      ', time_in_difz/timespent*100.0, &
+                                    '      ', flops_difz, &
+                                    '      ', flops_difz/time_in_difz/1000000000.0
+  write(*,'(A,F11.6,A,F4.1)')       'OTHER                   ', time_in_other, &
+                                    '      ', time_in_other/timespent*100.0
+  write(*,'(A)') '-------------------------------------------------------------------------------------'
+  !write(*,'(A,F11.6,I14,A,F8.4,A,F8.4)') &
+  write(*,'(A,F11.6,A,I14,A,F8.4)') &
+                                    'TOTAL                   ', timespent, &
+                                    '                ', flops_total, &
+                                    '      ', flops_total/timespent/1000000000.0
+  write(*,'(A)') '-------------------------------------------------------------------------------------'
 
 #ifdef USE_PAPI_WRAP
   ! print counters to screen
