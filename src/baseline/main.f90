@@ -10,6 +10,15 @@
 ! Syntax:
 !   extended_examples nx ny nz nt nb
 
+! define macros
+#ifdef USE_PAPI_WRAP
+#define START_TIMER(__hdl__,__t__)  call pw_start_collector(__hdl__)
+#define STOP_TIMER( __hdl__,__t__)  call pw_stop_collector(__hdl__)
+#else
+#define START_TIMER(__hdl__,__t__)  __t__ =  __t__ - omp_get_wtime()
+#define STOP_TIMER( __hdl__,__t__)  __t__ =  __t__ + omp_get_wtime()
+#endif
+
 program extended_examples
 
   ! modules
@@ -19,6 +28,8 @@ program extended_examples
 
   use operators, only: bc_zerograd, adv_upwind5_x, adv_upwind5_y, &
                        lap_2, lap_4, diff_impl_z, bc_zerovalue
+
+  use m_papi_wrap
 
   implicit none
 
@@ -37,6 +48,7 @@ program extended_examples
   integer :: istart, iend, jstart, jend, kstart, kend
   integer :: nincout
   integer :: iseed(80), nseed
+  integer :: hdl_bcs, hdl_advx, hdl_advy, hdl_lap4, hdl_difz
 
   ! ****************** read command line arguments ******************
 
@@ -55,6 +67,14 @@ program extended_examples
   print *, 'halo :: ', nb, 'lines'
   print *, 'time :: ', nt, 'time steps'
   write(*,'(A)') '========================================================================'
+
+
+  ! ****************** setup performance monitoring ******************
+  call pw_new_collector('bcs', hdl_bcs)
+  call pw_new_collector('advx', hdl_advx)
+  call pw_new_collector('advy', hdl_advy)
+  call pw_new_collector('lap4', hdl_lap4)
+  call pw_new_collector('difz', hdl_difz)
 
   ! ****************** setup compute domain ******************
 
@@ -134,53 +154,61 @@ program extended_examples
     !write(*,'(a,i5)') 'Step', it
 
     ! x-advection
-    time_in_bcs = time_in_bcs - omp_get_wtime()
+    START_TIMER(hdl_bcs, time_in_bcs)
     call bc_zerograd( data_in, 3, .true., .true., .false., .false., &
                       nx, ny, nz, istart, iend, jstart, jend, kstart, kend )
-    time_in_bcs = time_in_bcs + omp_get_wtime()
+    STOP_TIMER(hdl_bcs, time_in_bcs)
 
-    time_in_advx= time_in_advx - omp_get_wtime()
+    START_TIMER(hdl_advx, time_in_advx)
     call adv_upwind5_x( data_in, data_out, cflx, &
                         nx, ny, nz, istart, iend, jstart, jend, kstart, kend )
-    time_in_advx= time_in_advx + omp_get_wtime()
+    STOP_TIMER(hdl_advx, time_in_advx)
     call swap_data()
 
     ! y-advection
-    time_in_bcs = time_in_bcs - omp_get_wtime()
+    START_TIMER(hdl_bcs, time_in_bcs)
     call bc_zerograd( data_in, 3, .false., .false., .true., .true., &
                       nx, ny, nz, istart, iend, jstart, jend, kstart, kend )
-    time_in_bcs = time_in_bcs + omp_get_wtime()
+    STOP_TIMER(hdl_bcs, time_in_bcs)
 
-    time_in_advy= time_in_advy - omp_get_wtime()
+    START_TIMER(hdl_advy, time_in_advy)
     call adv_upwind5_y( data_in, data_out, cfly, &
                         nx, ny, nz, istart, iend, jstart, jend, kstart, kend )
-    time_in_advy= time_in_advy + omp_get_wtime()
+    STOP_TIMER(hdl_advy, time_in_advy)
     call swap_data()
 
     ! xy-diffusion
-    time_in_bcs = time_in_bcs - omp_get_wtime()
+    START_TIMER(hdl_bcs, time_in_bcs)
     call bc_zerograd( data_in, 2, .true., .true., .true., .true., &
                       nx, ny, nz, istart, iend, jstart, jend, kstart, kend )
-    time_in_bcs = time_in_bcs + omp_get_wtime()
+    STOP_TIMER(hdl_bcs, time_in_bcs)
 
-    time_in_lap4= time_in_lap4 - omp_get_wtime()
+    START_TIMER(hdl_lap4, time_in_lap4)
     call lap_4( data_in, data_out, dcoeff, &
                 nx, ny, nz, istart, iend, jstart, jend, kstart, kend )
-    time_in_lap4= time_in_lap4 + omp_get_wtime()
+    STOP_TIMER(hdl_lap4, time_in_lap4)
     call swap_data()
 
     ! z-diffusion (implicit)
-    time_in_difz= time_in_difz - omp_get_wtime()
+    START_TIMER(hdl_difz, time_in_difz)
     call diff_impl_z( data_in, data_out, kcoeff, &
                       nx, ny, nz, istart, iend, jstart, jend )
-    time_in_difz= time_in_difz + omp_get_wtime()
+    STOP_TIMER(hdl_difz, time_in_difz)
     call swap_data()
-
   end do
 
-  ! stop timer
+  ! get times
   timespent = timespent + omp_get_wtime();
+#ifdef USE_PAPI_WRAP
+  ! get times directly from papi wrapper
+  call pw_get_time(hdl_bcs, time_in_bcs)
+  call pw_get_time(hdl_lap4, time_in_lap4)
+  call pw_get_time(hdl_advx, time_in_advx)
+  call pw_get_time(hdl_advy, time_in_advy)
+  call pw_get_time(hdl_difz, time_in_difz)
+#endif
   time_in_other = timespent - (time_in_bcs+time_in_advx+time_in_advy+time_in_lap4+time_in_difz)
+
   ! print table sumarizing 
   write(*,'(A)') '-----------------------------------------------------'
   write(*,'(A)') 'component               walltime (s)  proportion (%)'
@@ -195,7 +223,10 @@ program extended_examples
   write(*,'(A,F11.6,A)')      'TOTAL                ', timespent
   write(*,'(A)') '-----------------------------------------------------'
 
-
+#ifdef USE_PAPI_WRAP
+  ! print counters to screen
+  call pw_print()
+#endif
 
   ! ****************** cleanup ******************
 
