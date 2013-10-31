@@ -1,7 +1,7 @@
 !******************************************
 ! m_operators.f90
-! Author: O. Fuhrer, 15.02.2011, MeteoSwiss
-! Email: oliver.fuhrer@meteosiwss.ch
+! based on min-app code written by Oliver Fuhrer, MeteoSwiss
+! modified by Ben Cumming, CSCS
 ! *****************************************
 
 ! Description: Contains simple operators which can be used on 3d-meshes
