@@ -13,7 +13,23 @@ use stats,     only: flops_advx, flops_advy, flops_lap4, flops_bc, flops_difz
 
 implicit none
 
+! global variables
+real (kind=ir), allocatable :: ccol(:,:,:)
+real (kind=ir), allocatable :: dcol(:,:,:)
+
 contains
+
+!==============================================================================
+
+subroutine init_operators( nx, ny, nz, ierr )
+    integer, intent(in) :: nx, ny, nz
+    integer, intent(out) :: ierr
+
+    ! allocate temporary fields for tridiagonal solve
+    allocate(ccol(nx,ny,nz), dcol(nx,ny,nz), stat=ierr)
+    !call error(ierr /= 0, 'Problem allocating memory')
+
+end subroutine init_operators
 
 !==============================================================================
 
@@ -235,8 +251,94 @@ subroutine lap_4(s, s_out, dcoeff, nx, ny, nz, &
 end subroutine lap_4
 
 !==============================================================================
+subroutine diff_impl_z_lu(s_in, s_out, kbar, nx, ny, nz, istart, iend, jstart, jend)
+!------------------------------------------------------------------------------
+! Description:
+!   This subroutine caculates the implicit vertical diffusion operator
+!   of an input array 's' using constant vertical grid spacing and diffusion
+!   coefficient
+!
+! Method:
+!   Tridiagonal solve using Thomas' algorithm
+!------------------------------------------------------------------------------
 
-subroutine diff_impl_z(s, s_out, kcoeff, nx, ny, nz, &
+    ! arguments
+    integer, intent(in) :: nx, ny, nz
+    real (kind=ir), intent(in)  :: s_in(nx, ny, nz)
+    real (kind=ir), intent(out) :: s_out(nx, ny, nz)
+    real (kind=ir), intent(in)  :: kbar
+    integer, intent(in) :: istart, iend, jstart, jend
+
+    ! local variables
+    integer :: i, j, k
+    real (kind=ir) :: btmp, dtmp
+    real (kind=ir) :: update
+
+    !======================================
+    ! forward substitution phase
+    !======================================
+    ! do first step : k=1
+    do j = jstart, jend
+        do i = istart, iend
+            btmp = kbar + 1.0_ir
+            ccol(i,j,1) = -1.0_ir*kbar/btmp
+            dcol(i,j,1) = s_in(i,j,1)/btmp
+        end do
+    end do
+    ! do middle steps : k=2:N-1
+    do k = 2, nz-1
+        do j = jstart, jend
+            do i = istart, iend
+                btmp = 2.0_ir*kbar + 1.0_ir + kbar*ccol(i,j,k-1)
+                dtmp = s_in(i,j,k) + kbar*dcol(i,j,k-1)
+                ccol(i,j,k) = -1.0_ir * kbar / btmp
+                dcol(i,j,k) = dtmp / btmp
+            end do
+        end do
+    end do
+    ! do last step : k=N
+    do j = jstart, jend
+        do i = istart, iend
+            btmp = Kbar + 1.0_ir + Kbar*ccol(i,j,nz-1)
+            dtmp = s_in(i,j,nz) + Kbar*dcol(i,j,nz-1)
+            dcol(i,j,nz) = dtmp / btmp
+            s_out(i,j,nz) = dcol(i,j,nz)
+        end do
+    end do
+
+    !======================================
+    ! backward substitution phase
+    !======================================
+    ! do steps : k=N-1:-1:1
+    do k = nz-1, 1, -1
+        do j = jstart, jend
+            do i = istart, iend
+                ! for some reason the following has to be done in two steps
+                ! (with temporary variable) to produce correct results for
+                ! the cray compiler. If a more experience Fortran programmer
+                ! can fix this, please do! The original one line statment is
+                ! commented out below
+                update = ccol(i,j,k)*s_out(i,j,k+1)
+                s_out(i,j,k) = dcol(i,j,k) - update
+                !s_out(i,j,k) = dcol(i,j,k) - ccol(i,j,k)*s_out(i,j,k+1)
+            end do
+        end do
+    end do
+
+    !4 * i * j
+    !9 * i * j * k-2
+    !6 * i * j
+    !2 * i * j * k-1
+    ! =>
+    ! 12 * i * j
+    ! 11 * i * j * k-2
+  flops_difz =  flops_difz + 12*(iend-istart+1)*(jend-jstart+1) &
+                           + 11*(iend-istart+1)*(jend-jstart+1)*(nz-2)
+
+
+end subroutine diff_impl_z_lu
+
+subroutine diff_impl_z_ul(s, s_out, kcoeff, nx, ny, nz, &
                        istart, iend, jstart, jend)
 
 !------------------------------------------------------------------------------
@@ -361,9 +463,9 @@ subroutine diff_impl_z(s, s_out, kcoeff, nx, ny, nz, &
   !      2 i*j*(k-1)
 
   flops_difz =  flops_difz + 3*(iend-istart+1)*(jend-jstart+1) &
-                           + 9*(iend-istart+3)*(jend-jstart+3)*(nz-1)
+                           + 9*(iend-istart+1)*(jend-jstart+1)*(nz-1)
 
-end subroutine diff_impl_z
+end subroutine diff_impl_z_ul
 
 !==============================================================================
 

@@ -23,12 +23,15 @@ program extended_examples
 
   ! modules
   use omp_lib
+#ifdef  USE_PAPI_WRAP
   use m_papi_wrap
+#endif
 
   use constants, only: ir
 
   use operators, only: bc_zerograd, adv_upwind5_x, adv_upwind5_y, &
-                       lap_2, lap_4, diff_impl_z, bc_zerovalue
+                       lap_2, lap_4, diff_impl_z_ul, diff_impl_z_lu, bc_zerovalue, &
+                       init_operators
 
   use stats,     only: flops_advx, flops_advy, flops_bc, flops_difz, &
                        flops_lap4, flops_total
@@ -95,6 +98,8 @@ program extended_examples
   ! allocate global fields
   allocate(data_in(nx,ny,nz), data_out(nx,ny,nz), &
            cflx(nx,ny,nz), cfly(nx,ny,nz), stat=ierr)
+  call error(ierr /= 0, 'Problem allocating memory')
+  call init_operators(nx,ny,nz,ierr)
   call error(ierr /= 0, 'Problem allocating memory')
 
   ! initialize to zero
@@ -168,8 +173,7 @@ program extended_examples
     STOP_TIMER(hdl_bcs, time_in_bcs)
 
     START_TIMER(hdl_advx, time_in_advx)
-    call adv_upwind5_x( data_in, data_out, cflx, &
-                        nx, ny, nz, istart, iend, jstart, jend, kstart, kend )
+    call adv_upwind5_x( data_in, data_out, cflx, nx, ny, nz, istart, iend, jstart, jend, kstart, kend )
     STOP_TIMER(hdl_advx, time_in_advx)
     call swap_data()
 
@@ -180,8 +184,7 @@ program extended_examples
     STOP_TIMER(hdl_bcs, time_in_bcs)
 
     START_TIMER(hdl_advy, time_in_advy)
-    call adv_upwind5_y( data_in, data_out, cfly, &
-                        nx, ny, nz, istart, iend, jstart, jend, kstart, kend )
+    call adv_upwind5_y( data_in, data_out, cfly, nx, ny, nz, istart, iend, jstart, jend, kstart, kend )
     STOP_TIMER(hdl_advy, time_in_advy)
     call swap_data()
 
@@ -192,15 +195,13 @@ program extended_examples
     STOP_TIMER(hdl_bcs, time_in_bcs)
 
     START_TIMER(hdl_lap4, time_in_lap4)
-    call lap_4( data_in, data_out, dcoeff, &
-                nx, ny, nz, istart, iend, jstart, jend, kstart, kend )
+    call lap_4( data_in, data_out, dcoeff, nx, ny, nz, istart, iend, jstart, jend, kstart, kend )
     STOP_TIMER(hdl_lap4, time_in_lap4)
     call swap_data()
 
     ! z-diffusion (implicit)
     START_TIMER(hdl_difz, time_in_difz)
-    call diff_impl_z( data_in, data_out, kcoeff, &
-                      nx, ny, nz, istart, iend, jstart, jend )
+    call diff_impl_z_lu( data_in, data_out, kcoeff, nx, ny, nz, istart, iend, jstart, jend )
     STOP_TIMER(hdl_difz, time_in_difz)
     call swap_data()
   end do
