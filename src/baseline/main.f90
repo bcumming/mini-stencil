@@ -72,11 +72,13 @@ program extended_examples
 
 
   ! ****************** setup performance monitoring ******************
+#ifdef USE_PAPI_WRAP
   call pw_new_collector('bcs', hdl_bcs)
   call pw_new_collector('advx', hdl_advx)
   call pw_new_collector('advy', hdl_advy)
   call pw_new_collector('lap4', hdl_lap4)
   call pw_new_collector('difz', hdl_difz)
+#endif
 
   ! ****************** setup compute domain ******************
 
