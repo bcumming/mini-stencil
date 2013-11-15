@@ -1,4 +1,4 @@
-include ../../makefile.inc
+include ../../options
 
 SOURCE_PATH=_internal/Source/
 

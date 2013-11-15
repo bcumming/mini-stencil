@@ -1,11 +1,11 @@
 #pragma once
 
+#ifdef __cplusplus
 #include "SerializationFramework.h"
 
-//#ifdef __cplusplus
-//extern "C"
-//{
-//#endif
+extern "C"
+{
+#endif
     // Init / End
     void fs_Initialize(int singleFile, int overwrite,
                        const char* basepath, int pathLength,
@@ -55,9 +55,9 @@
 
     // debug
     void fs_PrintSerializerInfo();
-//#ifdef __cplusplus
-//}
-//#endif
+#ifdef __cplusplus
+}
 
 Serializer& fs_Serializer();
 SavePoint& fs_SavePoint();
+#endif

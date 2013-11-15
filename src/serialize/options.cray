@@ -1,0 +1,12 @@
+# cray compiler flags
+CXXFLAGS=-h nomessage=381 # turn of warning about redundant ; at end of line
+FTNFLAGS=-e Z # c-style preprocessing
+
+# compiler aliases
+CXX=CC
+CC=cc
+FTN=ftn
+
+# boost path
+BOOST=/project/csstaff/bcumming/lib/boost_1_49_0/
+

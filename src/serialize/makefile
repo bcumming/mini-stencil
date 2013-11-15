@@ -1,4 +1,4 @@
-include makefile.inc
+include options
 
 default:
 	$(MAKE) install -C libs

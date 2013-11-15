@@ -1,4 +1,4 @@
-include ../makefile.inc
+include ../options
 
 install: gtest json
 	cp libjson/*.a ../lib

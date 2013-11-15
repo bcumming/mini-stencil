@@ -1,4 +1,4 @@
-include ../../makefile.inc
+include ../../options
 
 SOURCE=gmock-gtest-all.cc  gmock_main.cc
 OBJ=gmock-gtest-all.o  gmock_main.o
