@@ -39,5 +39,5 @@ libserialization.a: $(OBJ)
 	ar rcs libserialization.a $(OBJ)
 
 clean:
-	rm -f *.o
+	rm -f *.o *.i *.mod
 	rm -f *.a

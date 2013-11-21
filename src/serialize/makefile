@@ -9,6 +9,6 @@ clean:
 	$(MAKE) clean -C libs
 	$(MAKE) clean -C src
 	$(MAKE) clean -C test
-	rm -rf lib/*
-	rm -rf bin/*
+	rm -rf lib/*.a
+	rm -rf bin/*.json bin/*.dat
 
