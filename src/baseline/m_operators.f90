@@ -179,12 +179,9 @@ subroutine d_to_a(s_out, u_in, v_in, w_in, cx, cy, cz, nx, ny, nz,             &
 ! local variables
   integer :: i, j, k
 
-  const1 = 1.0_ir / 60.0_ir
-
   do k = kstart, kend
     do j = jstart, jend
       do i = istart, iend
-
         s_out(i,j,k)  =   cx(1)*u_in(i+1, j,   k  ) + cx(2)*u_in(i,   j,   k  ) +   &
           &               cy(1)*v_in(i,   j+1, k  ) + cy(2)*v_in(i,   j,   k  ) +   &
           &               cz(1)*w_in(i,   j,   k+1) + cz(2)*w_in(i,   j,   k  )
