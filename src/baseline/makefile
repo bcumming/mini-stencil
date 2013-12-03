@@ -1,9 +1,9 @@
 FTN = ftn
 FFLAGS = -O2
-FFLAGS += -e Z # use c-style preprocessing
+FFLAGS += -e Z -D_SERIALIZE # use c-style preprocessing
 
-SOURCES = m_constants.f90 m_stats.f90 m_operators.f90 m_cdf.f90
-OBJ = m_constants.o m_stats.o m_operators.o m_cdf.o
+SOURCES = m_constants.f90 m_stats.f90 m_serializer.f90 m_operators.f90 m_cdf.f90
+OBJ = m_constants.o m_stats.o m_serializer.o m_operators.o m_cdf.o
 
 #PAPI_PATH=/project/csstaff/bcumming/repos/papi/install/
 #PAPIWRAP_PATH=/scratch/santis/bcumming/papi-wrap/

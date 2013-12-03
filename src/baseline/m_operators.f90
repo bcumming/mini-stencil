@@ -9,7 +9,7 @@
 module operators
 
 use constants, only: ir
-use stats,     only: flops_advx, flops_advy, flops_lap4, flops_bc, flops_difz
+use stats,     only: flops_advx, flops_advy, flops_lap4, flops_bc, flops_difz, flops_dtoa
 
 implicit none
 
@@ -189,6 +189,8 @@ subroutine d_to_a(s_out, u_in, v_in, w_in, cx, cy, cz, nx, ny, nz,             &
      end do
     end do
   end do
+
+  flops_dtoa =  flops_dtoa +  9 * (iend-istart+1)*(jend-jstart+1)*(kend-kstart+1)
 
 end subroutine d_to_a
 

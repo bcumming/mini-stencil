@@ -29,31 +29,35 @@ program extended_examples
 
   use constants, only: ir
 
-  use operators, only: bc_zerograd, adv_upwind5_x, adv_upwind5_y, &
+  use operators, only: bc_zerograd, adv_upwind5_x, adv_upwind5_y, d_to_a, &
                        lap_2, lap_4, diff_impl_z_ul, diff_impl_z_lu, bc_zerovalue, &
                        init_operators
 
   use stats,     only: flops_advx, flops_advy, flops_bc, flops_difz, &
-                       flops_lap4, flops_total
+                       flops_dtoa, flops_lap4, flops_total
 
   implicit none
 
   ! variables
 
   integer :: nx, ny, nz, nt, nb
+  real (kind=ir), allocatable :: u_dgrid(:,:,:), v_dgrid(:,:,:), w_dgrid(:,:,:)
   real (kind=ir), allocatable :: data_in(:,:,:), data_out(:,:,:)
   real (kind=ir), allocatable :: cflx(:,:,:), cfly(:,:,:)
   real (kind=ir), allocatable :: dcoeff, kcoeff
+  real (kind=ir), allocatable :: cosi, sini, cosj, sinj, cosk, sink
+  real (kind=ir)              :: cx(2), cy(2), cz(2)
+  real (kind=ir), parameter   :: pi = 3.141592653589793_ir
 
   real (kind=8) :: timespent
-  real (kind=8) :: time_in_bcs, time_in_advx, time_in_advy, time_in_lap4, time_in_difz, time_in_other
+  real (kind=8) :: time_in_bcs, time_in_dtoa, time_in_advx, time_in_advy, time_in_lap4, time_in_difz, time_in_other
 
   integer :: ierr
   integer :: i, j, k, it
   integer :: istart, iend, jstart, jend, kstart, kend
   integer :: nincout
   integer :: iseed(80), nseed
-  integer :: hdl_bcs, hdl_advx, hdl_advy, hdl_lap4, hdl_difz
+  integer :: hdl_bcs, hdl_dtoa, hdl_advx, hdl_advy, hdl_lap4, hdl_difz
 
   ! ****************** read command line arguments ******************
 
@@ -76,7 +80,8 @@ program extended_examples
 
   ! ****************** setup performance monitoring ******************
 #ifdef USE_PAPI_WRAP
-  call pw_new_collector('bcs', hdl_bcs)
+  call pw_new_collector('bcs',  hdl_bcs)
+  call pw_new_collector('dtoa', hdl_dtoa)
   call pw_new_collector('advx', hdl_advx)
   call pw_new_collector('advy', hdl_advy)
   call pw_new_collector('lap4', hdl_lap4)
@@ -96,7 +101,9 @@ program extended_examples
   ! ****************** allocate memory ******************
 
   ! allocate global fields
+  
   allocate(data_in(nx,ny,nz), data_out(nx,ny,nz), &
+           u_dgrid(nx+1,ny,nz), v_dgrid(nx,ny+1,nz), w_dgrid(nx,ny,nz+1), &
            cflx(nx,ny,nz), cfly(nx,ny,nz), stat=ierr)
   call error(ierr /= 0, 'Problem allocating memory')
   call init_operators(nx,ny,nz,ierr)
@@ -120,6 +127,7 @@ program extended_examples
   call random_number(data_in)
 
   ! initialize initial condition in calculation domain
+  ! initialize D-grid winds in a smooth way
   do k = kstart, kend
     do j = jstart, jend
       do i = istart, iend
@@ -127,10 +135,46 @@ program extended_examples
           data_in(i,j,k) = 1.0_ir
         else
           data_in(i,j,k) = 0.0_ir
-        end if
+        endif
+        cosi = cos( i*pi / nx ) ;   sini = sin( i*pi / nx )
+        cosj = cos( j*pi / nx ) ;   sinj = sin( j*pi / nx )
+        cosk = cos( k*pi / nx ) ;   sink = sin( k*pi / nx )
+        u_dgrid(i,j,k)   = cosi * sinj * sink 
+        v_dgrid(i,j,k)   = sini * cosj * sink 
+        w_dgrid(i,j,k)   = sini * sinj * cosk 
       end do
     end do
   end do
+
+  ! Add an additional layer to the D-grid variables
+
+  do k = kstart, kend
+    do j = jstart, jend
+      cosi = cos( i*pi / nx )
+      sinj = sin( j*pi / nx )
+      sink = sin( (iend+1)*pi / nx )
+      u_dgrid(iend+1,j,k)   = cosi * sinj * sink 
+    end do
+  end do
+
+  do k = kstart, kend
+    do i = istart, iend
+      sini = sin( i*pi / nx )
+      cosj = cos( (jend+1)*pi / nx )
+      sink = sin( k*pi / nx )
+      v_dgrid(i,jend+1,k)   = sini * cosj * sink 
+    end do
+  end do
+
+  do j = jstart, jend
+    do i = istart, iend
+      sini = sin( i*pi / nx )
+      sinj = sin( j*pi / nx )
+      cosk = cos( (kend+1)*pi / nx )
+      w_dgrid(i,j,k)   = sini * sinj * cosk 
+    end do
+  end do
+
 
   ! setup vertical diffusion coefficient
   kcoeff = 0.1_ir
@@ -148,6 +192,7 @@ program extended_examples
 
   ! ****************** serial reference version ******************
   time_in_bcs  = 0.0_ir
+  time_in_dtoa = 0.0_ir
   time_in_advx = 0.0_ir
   time_in_advy = 0.0_ir
   time_in_lap4 = 0.0_ir
@@ -156,6 +201,7 @@ program extended_examples
   flops_advy = 0
   flops_bc   = 0
   flops_difz = 0
+  flops_dtoa = 0
   flops_lap4 = 0
 
   ! start timer
@@ -166,12 +212,35 @@ program extended_examples
 
     !write(*,'(a,i5)') 'Step', it
 
-    ! x-advection
+    ! boundary D-grid
+    START_TIMER(hdl_bcs, time_in_bcs)
+    call bc_zerograd( u_dgrid, 3, .true., .true., .false., .false., &
+                      nx+1, ny, nz, istart, iend+1, jstart, jend, kstart, kend )
+    call bc_zerograd( v_dgrid, 3, .true., .true., .false., .false., &
+                      nx, ny+1, nz, istart, iend, jstart, jend+1, kstart, kend )
+    call bc_zerograd( w_dgrid, 3, .true., .true., .false., .false., &
+                      nx, ny, nz+1, istart, iend, jstart, jend, kstart, kend+1 )
+    STOP_TIMER(hdl_bcs, time_in_bcs)
+
+
+    ! D-to-A grid operation (Like a divergence operation)
+
+    cx(1) = 1.0_ir / (2.0_ir * nx ); cx(2) = -1.0_ir / (2.0_ir * nx )
+    cy(1) = 1.0_ir / (2.0_ir * ny ); cy(2) = -1.0_ir / (2.0_ir * ny )
+    cz(1) = 1.0_ir / (2.0_ir * nz ); cz(2) = -1.0_ir / (2.0_ir * nz )
+
+    START_TIMER(hdl_dtoa, time_in_dtoa)
+    call d_to_a(data_out, u_dgrid, v_dgrid, w_dgrid, cx, cy, cz, nx, ny, nz,             &
+                istart, iend, jstart, jend, kstart, kend)
+    STOP_TIMER(hdl_dtoa, time_in_dtoa)
+
+    ! boundary x-advection
     START_TIMER(hdl_bcs, time_in_bcs)
     call bc_zerograd( data_in, 3, .true., .true., .false., .false., &
                       nx, ny, nz, istart, iend, jstart, jend, kstart, kend )
     STOP_TIMER(hdl_bcs, time_in_bcs)
 
+    ! x-advection
     START_TIMER(hdl_advx, time_in_advx)
     call adv_upwind5_x( data_in, data_out, cflx, nx, ny, nz, istart, iend, jstart, jend, kstart, kend )
     STOP_TIMER(hdl_advx, time_in_advx)
@@ -211,13 +280,14 @@ program extended_examples
 #ifdef USE_PAPI_WRAP
   ! get times directly from papi wrapper
   call pw_get_time(hdl_bcs, time_in_bcs)
+  call pw_get_time(hdl_dtoa, time_in_dtoa)
   call pw_get_time(hdl_lap4, time_in_lap4)
   call pw_get_time(hdl_advx, time_in_advx)
   call pw_get_time(hdl_advy, time_in_advy)
   call pw_get_time(hdl_difz, time_in_difz)
 #endif
-  time_in_other = timespent - (time_in_bcs+time_in_advx+time_in_advy+time_in_lap4+time_in_difz)
-  flops_total = flops_advx + flops_advy + flops_lap4 + flops_difz + flops_bc
+  time_in_other = timespent - (time_in_bcs+time_in_dtoa+time_in_advx+time_in_advy+time_in_lap4+time_in_difz)
+  flops_total = flops_advx + flops_dtoa + flops_advy + flops_lap4 + flops_difz + flops_bc
 
   ! print table sumarizing 
   write(*,'(A)') '-------------------------------------------------------------------------------'
@@ -225,6 +295,11 @@ program extended_examples
   write(*,'(A)') '-------------------------------------------------------------------------------'
   write(*,'(A,F11.6,A,F4.1)')       'boundary conditions     ', time_in_bcs, &
                                     '      ', time_in_bcs/timespent*100.0
+  write(*,'(A,F11.6,A,F4.1,A,I14,A,F8.4)') &
+                                    'D-to-A divergence       ', time_in_dtoa, &
+                                    '      ', time_in_dtoa/timespent*100.0, &
+                                    '      ', flops_dtoa, &
+                                    '      ', flops_dtoa/time_in_advx/1000000000.0
   write(*,'(A,F11.6,A,F4.1,A,I14,A,F8.4)') &
                                     'advection x             ', time_in_advx, &
                                     '      ', time_in_advx/timespent*100.0, &
